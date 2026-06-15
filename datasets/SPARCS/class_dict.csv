@@ -1,0 +1,8 @@
+name,r,g,b
+CloudShadow,0,0,0
+CloudShadowoverWater,0,0,128
+Water,0,0,255
+Ice/Snow,0,255,255
+Land,128,128,128
+Clouds,255,255,255
+Flooded,128,128,0

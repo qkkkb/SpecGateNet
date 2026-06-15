@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+.venv/
+env/
+venv/
+
+# Training artifacts
+checkpoints/
+runs/
+result/
+output/
+demo/
+*.pth
+*.pt
+*.ckpt
+
+# Datasets (keep class_dict.csv, ignore raw imagery)
+datasets/*/train/
+datasets/*/val/
+datasets/*/test/
+
+# IDE / OS / local agent config
+.idea/
+.vscode/
+.claude/
+.DS_Store
+Thumbs.db
