@@ -43,7 +43,8 @@ SpecGateNet/
 ├── utils.py                # label parsing, one-hot, metrics, LR scheduler
 ├── models/
 │   └── specgatenet.py      # the SpecGateNet model (self-contained)
-├── datasets/               # class_dict.csv per dataset + layout docs (no raw data)
+├── datasets/               # class_dict.csv, split manifests, layout docs (no raw data)
+├── tools/                  # split-manifest and patch-preparation utilities
 ├── requirements.txt
 └── LICENSE                 # MIT
 ```
@@ -63,6 +64,8 @@ A CUDA-capable GPU is recommended. The code was developed with
 
 Raw imagery is **not** included. Arrange each dataset as below and see
 [`datasets/README.md`](datasets/README.md) for details and download pointers.
+The exact filename-level split manifests used for the reported experiments are
+provided in [`datasets/splits/`](datasets/splits/).
 
 ```
 datasets/<NAME>/
@@ -73,6 +76,20 @@ datasets/<NAME>/
 
 `class_dict.csv` files for `SPARCS` (7 classes), `CloudSEN12` (3 classes) and
 `38-Cloud` (2 classes) are provided.
+
+To audit or regenerate the split manifests from prepared local datasets:
+
+```bash
+python tools/build_split_manifests.py \
+  --datasets-root /path/to/prepared/datasets \
+  --sparcs-name SPARCS-val \
+  --out-dir datasets/splits
+```
+
+The reported metrics use the `train` and `val` rows in the manifests. The `val`
+split is the held-out evaluation subset used for checkpoint selection and metric
+reporting. Any rows marked as `unused_rounding` are not used for the reported
+metrics.
 
 ## Training
 

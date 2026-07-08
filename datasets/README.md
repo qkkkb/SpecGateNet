@@ -39,3 +39,38 @@ datasets/
 
 Download from the respective official sources, convert the masks to the RGB
 color scheme in the matching `class_dict.csv`, and arrange them as shown above.
+
+## Split manifests
+
+Exact filename-level split manifests are provided under
+[`datasets/splits/`](splits/). They are CSV files that list the image filename,
+label filename, split assignment, source scene ID, original patch ID, and
+subpatch indices where applicable.
+
+The reported results use the rows where `used_for_reported_metrics=true`, i.e.
+the `train` and `val` folders. The `val` split is the held-out evaluation subset
+used for checkpoint selection and metric reporting. Rows marked as
+`unused_rounding` are leftovers from the integer split operation and are not
+used in the reported metrics.
+
+Protocol details:
+
+| Dataset | Reported train samples | Reported held-out samples | Split unit |
+| --- | ---: | ---: | --- |
+| `CloudSEN12` | 45,621 | 5,067 | 509x509 original patch before 3x3 subpatch cropping |
+| `SPARCS` | 1,800 | 200 | Fixed 224x224 patch-level split |
+| `38-Cloud` | 4,639 | 515 | Fixed 224x224 patch-level split |
+
+For CloudSEN-12, all nine 224x224 subpatches from a 509x509 original patch stay
+within the same subset. SPARCS-Val and 38-Cloud use fixed patch-level controlled
+splits for fair method comparison under the same protocol; they should not be
+interpreted as scene-level generalization splits.
+
+To regenerate the manifests from prepared local folders:
+
+```bash
+python tools/build_split_manifests.py \
+  --datasets-root /path/to/prepared/datasets \
+  --sparcs-name SPARCS-val \
+  --out-dir datasets/splits
+```

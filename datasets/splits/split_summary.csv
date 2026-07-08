@@ -1,0 +1,9 @@
+dataset,split,reported_subset,used_for_reported_metrics,samples,original_patches,source_scenes
+38-Cloud,train,train,true,4639,4639,18
+38-Cloud,val,heldout_evaluation,true,515,515,18
+38-Cloud,test,unused_rounding,false,1,1,1
+CloudSEN12,train,train,true,45621,5069,5069
+CloudSEN12,val,heldout_evaluation,true,5067,563,563
+CloudSEN12,test,unused_rounding,false,9,1,1
+SPARCS,train,train,true,1800,80,80
+SPARCS,val,heldout_evaluation,true,200,74,74
