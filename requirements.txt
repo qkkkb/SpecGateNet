@@ -8,3 +8,4 @@ scipy
 tqdm
 tensorboard
 matplotlib
+thop>=0.1.1

@@ -1,52 +1,72 @@
 # SpecGateNet
 
-**SpecGateNet** (Spectrum-Guided Fusion Network, 频谱引导融合网络) is a dual-branch
-CNN–Transformer network for **cloud and cloud-shadow segmentation** in optical
-remote-sensing imagery, designed from a **frequency-domain perspective**.
+SpecGateNet is a dual-branch CNN-Transformer network for cloud and
+cloud-shadow segmentation in optical remote-sensing imagery. The repository
+contains the checkpoint-compatible model used for the manuscript experiments,
+the filename-level data split manifests, and the profiling, training, and
+evaluation utilities needed to audit the reported configuration.
 
-The Fourier amplitude spectrum of deep features encodes how energy is distributed across
-spatial frequencies: high-frequency components correspond to boundaries and texture (thin-cloud
-edges, cloud-shadow contours), while low-frequency components correspond to smooth regions
-(thick-cloud interiors, clear sky). SpecGateNet turns this amplitude-spectrum response into a
-**structural prior** and couples it with a learnable gate to produce a spatially adaptive
-fusion signal — addressing two weaknesses of prior dual-branch methods: insufficient
-cross-branch interaction in the encoder, and decoder fusion that treats every spatial location
-identically.
+## Architecture
 
-## Highlights
+The model uses RGB input and combines:
 
-- **Dual-branch encoder** — ResNet-50 (stride-1 stem, higher-resolution local detail) +
-  Swin Transformer (long-range context).
-- **Cross-Feature Fusion (CFF)** — explicit bidirectional CNN ↔ Transformer interaction across
-  the first three encoder stages (CBAM-enhanced).
-- **Frequency-domain DynamicFilter bottleneck** — input-adaptive FFT filtering that gives the
-  bottleneck a global receptive field.
-- **Spectrum-Guided Fusion decoder (SGF)** — the "SpecGate": the amplitude-spectrum energy map
-  generates a spatial gate that preserves low-level detail in high-frequency regions and relies
-  on semantics in low-frequency regions, applied across three cascaded decoder levels.
-- **PooledAFT** — Attention-Free-Transformer attention after the first SGF level for long-range
-  spatial dependency.
-- **RGB-only** — no infrared / auxiliary bands required.
+- a ResNet-50 branch for local spatial features;
+- a hierarchical Swin Transformer branch for contextual features;
+- three Cross-Feature Fusion (CFF) modules for bidirectional encoder interaction;
+- an input-adaptive frequency-domain DynamicFilter at the bottleneck;
+- PooledAFT for pooled long-range dependency modeling; and
+- three Spectrum-Guided Fusion (SGF) stages in the decoder.
 
-The default configuration takes a `3×224×224` RGB image and outputs an `n_classes×224×224`
-segmentation map (~40.8 M parameters with a ResNet-50 backbone).
+SGF computes an amplitude-derived, phase-free spectral-energy cue from the
+aligned high-level feature. This cue is not treated as a location-aligned
+boundary map. A lightweight convolutional gate is learned end to end from the
+cue and is used to modulate high- and low-level feature fusion.
 
-## Repository structure
+`models/specgatenet.py` is the single canonical model implementation. It
+strictly loads the original experiment checkpoints for SPARCS-Val,
+CloudSEN-12, and 38-Cloud.
 
+## Verified Complexity
+
+The following values were measured with `tools/profile_model.py` using one
+224x224 RGB input. PyTorch parameter counts include all model parameters;
+THOP parameter and operation counts are reported separately because THOP does
+not count every parameter used by custom operations.
+
+| Classes | Dataset setting | PyTorch params | THOP params | THOP FLOPs |
+| ---: | --- | ---: | ---: | ---: |
+| 7 | SPARCS-Val | 40.818324 M | 38.884429 M | 27.051236 G |
+| 3 | CloudSEN-12 | 40.818064 M | 38.884169 M | 27.038391 G |
+| 2 | 38-Cloud | 40.817999 M | 38.884104 M | 27.035179 G |
+
+Reproduce a profile with:
+
+```bash
+python tools/profile_model.py --num-classes 7 --size 224 --device cpu
 ```
+
+## Repository Structure
+
+```text
 SpecGateNet/
-├── main.py                 # entry point: build model + train (with per-epoch validation)
-├── train.py                # training loop (AMP, poly LR, optional aux loss)
-├── val.py                  # validation metrics (PA / MPA / mIoU / per-class P,R,F1)
-├── predict.py              # inference / visualization on a folder of images
-├── dataset.py              # HyDataset: RGB image + RGB mask loader
-├── utils.py                # label parsing, one-hot, metrics, LR scheduler
-├── models/
-│   └── specgatenet.py      # the SpecGateNet model (self-contained)
-├── datasets/               # class_dict.csv, split manifests, layout docs (no raw data)
-├── tools/                  # split-manifest and patch-preparation utilities
-├── requirements.txt
-└── LICENSE                 # MIT
+|-- models/
+|   |-- __init__.py
+|   `-- specgatenet.py
+|-- datasets/
+|   |-- README.md
+|   `-- splits/
+|-- tools/
+|   |-- build_split_manifests.py
+|   |-- prepare_patch_dataset.py
+|   |-- profile_model.py
+|   |-- train_specgatenet.py
+|   `-- evaluate_specgatenet.py
+|-- dataset.py
+|-- train.py
+|-- val.py
+|-- predict.py
+|-- requirements.txt
+`-- LICENSE
 ```
 
 ## Installation
@@ -57,27 +77,39 @@ conda activate specgatenet
 pip install -r requirements.txt
 ```
 
-A CUDA-capable GPU is recommended. The code was developed with
-`torch==2.5.0` / `torchvision==0.20.0` (CUDA 11.8).
+The code was verified with `torch==2.5.0` and `torchvision==0.20.0`.
+A CUDA-capable GPU is required by the provided training loop.
 
-## Data preparation
+## Data Preparation
 
-Raw imagery is **not** included. Arrange each dataset as below and see
-[`datasets/README.md`](datasets/README.md) for details and download pointers.
-The exact filename-level split manifests used for the reported experiments are
-provided in [`datasets/splits/`](datasets/splits/).
+Raw imagery is not redistributed. Arrange each prepared dataset as follows:
 
-```
+```text
 datasets/<NAME>/
-├── class_dict.csv
-├── train/{img,label}/*.png
-└── val/{img,label}/*.png
+|-- class_dict.csv
+|-- train/
+|   |-- img/*.png
+|   `-- label/*.png
+`-- val/
+    |-- img/*.png
+    `-- label/*.png
 ```
 
-`class_dict.csv` files for `SPARCS` (7 classes), `CloudSEN12` (3 classes) and
-`38-Cloud` (2 classes) are provided.
+The exact filename-level split manifests used by the reported protocol are in
+`datasets/splits/`. Dataset download pointers and class-label details are in
+`datasets/README.md`.
 
-To audit or regenerate the split manifests from prepared local datasets:
+If a prepared source directory contains the relative files listed by a
+manifest, reconstruct the corresponding layout with:
+
+```bash
+python tools/prepare_patch_dataset.py apply-manifest \
+  --manifest datasets/splits/SPARCS_split_manifest.csv \
+  --source-root /path/to/prepared/source \
+  --output-root datasets
+```
+
+The manifests can also be regenerated and audited with:
 
 ```bash
 python tools/build_split_manifests.py \
@@ -86,87 +118,66 @@ python tools/build_split_manifests.py \
   --out-dir datasets/splits
 ```
 
-The reported metrics use the `train` and `val` rows in the manifests. The `val`
-split is the held-out evaluation subset used for checkpoint selection and metric
-reporting. Any rows marked as `unused_rounding` are not used for the reported
-metrics.
-
 ## Training
 
-Edit the `params` block at the bottom of `main.py` (dataset name, number of classes,
-batch size, learning rate, …), then run:
+The manuscript configuration uses 224x224 RGB inputs, batch size 16, AdamW,
+an initial learning rate of `5e-5`, poly decay with power 2, 300 epochs,
+ImageNet-pretrained ResNet-50 residual stages, no auxiliary loss, and no TTA.
 
 ```bash
-python main.py
+python tools/train_specgatenet.py \
+  --data-root datasets \
+  --data-name SPARCS \
+  --num-classes 7 \
+  --batch-size 16 \
+  --learning-rate 5e-5 \
+  --num-epochs 300
 ```
 
-Key settings (`--data_name` must match a folder in `datasets/`, and `--num_classes`
-must match its `class_dict.csv`):
+Use `--no-cnn-pretrained` only when a randomly initialized ResNet branch is
+intended. When resuming, `--pretrained-model-path` loads the checkpoint with
+strict state-dict validation.
 
-| Argument          | Default        | Description                              |
-|-------------------|----------------|------------------------------------------|
-| `--data_root`     | `datasets`     | root containing the dataset folders      |
-| `--data_name`     | `SPARCS`       | dataset folder name                      |
-| `--num_classes`   | `7`            | number of classes (rows in class_dict)   |
-| `--crop_height/width` | `224`      | input resolution                         |
-| `--batch_size`    | `16`           | training batch size                      |
-| `--learning_rate` | `5e-5`         | base LR (poly decay)                     |
-| `--num_epochs`    | `300`          | total epochs                             |
-
-Validation runs every epoch; checkpoints are saved to
-`checkpoints/<data_name>/<model_name>/<timestamp>/` and metric logs to `result/`.
-Training curves are written for TensorBoard (`runs/`).
-
-## Inference
+## Evaluation
 
 ```bash
-python predict.py --checkpoint_path <path/to/checkpoint.pth> \
-                  --demo_root demo --demo_name <set> \
-                  --num_classes 7 --csv_path datasets/SPARCS/class_dict.csv
+python tools/evaluate_specgatenet.py \
+  --checkpoint /path/to/checkpoint.pth \
+  --data-root datasets \
+  --data-name SPARCS \
+  --num-classes 7 \
+  --device cuda
 ```
 
-Color-coded prediction masks are written under `<demo_root>/<demo_name>/<model_name>/`.
+The evaluation command strictly validates checkpoint compatibility before
+computing pixel accuracy, mean pixel accuracy, mIoU, and per-class IoU on the
+prepared held-out split.
 
-## Use the model directly
+## Direct Use
 
 ```python
 import torch
-from models.specgatenet import SpecGateNet
+from models import SpecGateNet
 
-model = SpecGateNet(n_classes=7, size=224, cnn_pretrained=True)
-y = model(torch.randn(1, 3, 224, 224))   # -> [1, 7, 224, 224]
+model = SpecGateNet(
+    n_classes=7,
+    size=224,
+    cnn_pretrained=False,
+    aux_loss=False,
+)
+output = model(torch.randn(1, 3, 224, 224))
+print(output.shape)  # torch.Size([1, 7, 224, 224])
 ```
 
 ## Results
 
-All results use **RGB-only** input (no auxiliary bands). SpecGateNet reaches the best mIoU on
-three public benchmarks, surpassing CNN, Transformer and hybrid baselines:
+All reported experiments use three-channel RGB input.
 
-| Dataset      | Task                         | mIoU    | Δ vs. 2nd-best |
-|--------------|------------------------------|---------|----------------|
-| CloudSEN-12  | cloud / shadow (3-class)     | 77.80%  | +1.33          |
-| SPARCS-Val   | 7-class cloud & shadow       | 76.75%  | +5.26          |
-| 38-Cloud     | cloud / background (2-class) | 93.30%  | +1.44          |
-
-Ablations attribute **70.1%** of the total gain to the spectral modules, with SGF contributing
-the largest single-module improvement (**+1.22%** mIoU).
-
-## Citation
-
-If you find this project useful, please consider citing it:
-
-```bibtex
-@misc{specgatenet,
-  title  = {SpecGateNet: A Spectrum-Guided Fusion Network for Cloud and Cloud-Shadow Segmentation},
-  author = {Kingsley},
-  year   = {2026},
-  howpublished = {\url{https://github.com/<your-account>/SpecGateNet}}
-}
-```
-
-## Author
-
-- **Kingsley** — 940714688@qq.com
+| Dataset | Task | mIoU |
+| --- | --- | ---: |
+| CloudSEN-12 | Cloud / cloud shadow / background | 77.80% |
+| SPARCS-Val | Seven-class cloud and cloud-shadow segmentation | 76.75% |
+| 38-Cloud | Cloud / background | 93.30% |
 
 ## License
 
